@@ -1,0 +1,230 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:modeler="http://camunda.org/schema/modeler/1.0" id="Definitions_0599ng1" targetNamespace="http://bpmn.io/schema/bpmn" exporter="Camunda Modeler" exporterVersion="5.1.0" modeler:executionPlatform="Camunda Platform" modeler:executionPlatformVersion="7.17.0">
+  <bpmn:process id="campaign-creation-process" name="campaign-creation-process" isExecutable="true">
+    <bpmn:startEvent id="StartEvent_1">
+      <bpmn:outgoing>Flow_1p31ap1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:endEvent id="Event_1k6xrgj">
+      <bpmn:incoming>Flow_04kqnwb</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:scriptTask id="Activity_ScriptTask_BuildOverlapValidationRequest" name="Build overlap validaton request" scriptFormat="javascript" camunda:resultVariable="overlapValidationRequest">
+      <bpmn:incoming>Flow_1p31ap1</bpmn:incoming>
+      <bpmn:outgoing>Flow_0yc7vbe</bpmn:outgoing>
+      <bpmn:script>var jsonVar = execution.getVariable("input");
+var parsedJsObj = JSON.parse(jsonVar);
+
+var jsonInfo = {};
+jsonInfo.startDate = parsedJsObj.startDate;
+jsonInfo.endDate = parsedJsObj.endDate;
+
+S(JSON.stringify(jsonInfo));</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:callActivity id="CallActivity_VerifyOverlapping" name="Verify campaigns overlapping" calledElement="rest-connector-process">
+      <bpmn:extensionElements>
+        <camunda:in sourceExpression="${&#34;POST&#34;}" target="httpMethod" />
+        <camunda:in sourceExpression="${&#34;/api/v1.0/campaigns/check-overlapping&#34;}" target="uri" />
+        <camunda:in sourceExpression="${overlapValidationRequest}" target="payload" />
+        <camunda:out source="httpResponse" target="httpResponse" />
+        <camunda:out source="httpStatusCode" target="httpStatusCode" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_0yc7vbe</bpmn:incoming>
+      <bpmn:outgoing>Flow_0zh376s</bpmn:outgoing>
+    </bpmn:callActivity>
+    <bpmn:sequenceFlow id="Flow_0yc7vbe" sourceRef="Activity_ScriptTask_BuildOverlapValidationRequest" targetRef="CallActivity_VerifyOverlapping" />
+    <bpmn:sequenceFlow id="Flow_1p31ap1" sourceRef="StartEvent_1" targetRef="Activity_ScriptTask_BuildOverlapValidationRequest" />
+    <bpmn:sequenceFlow id="Flow_0zh376s" sourceRef="CallActivity_VerifyOverlapping" targetRef="Gateway_1j7ixa3" />
+    <bpmn:exclusiveGateway id="Gateway_1j7ixa3" name="Overlaps?" default="Flow_1cm5chk">
+      <bpmn:incoming>Flow_0zh376s</bpmn:incoming>
+      <bpmn:outgoing>Flow_1cm5chk</bpmn:outgoing>
+      <bpmn:outgoing>Flow_0zv6xb5</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sequenceFlow id="Flow_1cm5chk" sourceRef="Gateway_1j7ixa3" targetRef="Activity_ScriptTask_BuildCampaignCreationRequest" />
+    <bpmn:sequenceFlow id="Flow_0zv6xb5" name="Yes" sourceRef="Gateway_1j7ixa3" targetRef="Event_0pnyt2j">
+      <bpmn:extensionElements>
+        <camunda:executionListener expression="${execution.setVariable(&#34;errorCode&#34;, &#34;OVERLAP&#34;)}" event="take" />
+      </bpmn:extensionElements>
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${httpStatusCode == 200 &amp;&amp; JSON(httpResponse).prop("result") == "true"}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:endEvent id="Event_0pnyt2j" name="Campaign with overlap">
+      <bpmn:extensionElements />
+      <bpmn:incoming>Flow_0zv6xb5</bpmn:incoming>
+      <bpmn:errorEventDefinition id="ErrorEventDefinition_0wrzs16" errorRef="Error_0hg48qd" />
+    </bpmn:endEvent>
+    <bpmn:subProcess id="SubProcess_1i34re8" triggeredByEvent="true">
+      <bpmn:endEvent id="EventoFinalizacionControlErrores">
+        <bpmn:incoming>SequenceFlow_02sgkga</bpmn:incoming>
+      </bpmn:endEvent>
+      <bpmn:startEvent id="StartErrorHandler">
+        <bpmn:outgoing>SequenceFlow_1l4hhzs</bpmn:outgoing>
+        <bpmn:errorEventDefinition id="ErrorEventDefinition_0lpn0jj" />
+      </bpmn:startEvent>
+      <bpmn:serviceTask id="ServiceTask_ErrorHandler" name="Error handler" camunda:expression="${execution.setVariable(&#34;error&#34;, execution.getVariable(&#34;errorMessage&#34;))}">
+        <bpmn:incoming>SequenceFlow_1l4hhzs</bpmn:incoming>
+        <bpmn:outgoing>SequenceFlow_02sgkga</bpmn:outgoing>
+      </bpmn:serviceTask>
+      <bpmn:sequenceFlow id="SequenceFlow_02sgkga" sourceRef="ServiceTask_ErrorHandler" targetRef="EventoFinalizacionControlErrores" />
+      <bpmn:sequenceFlow id="SequenceFlow_1l4hhzs" sourceRef="StartErrorHandler" targetRef="ServiceTask_ErrorHandler" />
+    </bpmn:subProcess>
+    <bpmn:sequenceFlow id="Flow_04kqnwb" sourceRef="CallActivity_CreateCampaign" targetRef="Event_1k6xrgj" />
+    <bpmn:callActivity id="CallActivity_CreateCampaign" name="Create campaign" calledElement="rest-connector-process">
+      <bpmn:extensionElements>
+        <camunda:in sourceExpression="${&#34;POST&#34;}" target="httpMethod" />
+        <camunda:in sourceExpression="${campaignCreationRequest}" target="payload" />
+        <camunda:in sourceExpression="${&#34;/api/v1.0/campaigns&#34;}" target="uri" />
+        <camunda:out source="httpResponse" target="httpResponse" />
+        <camunda:out source="httpStatusCode" target="httpStatusCode" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_0wrs3vu</bpmn:incoming>
+      <bpmn:outgoing>Flow_04kqnwb</bpmn:outgoing>
+    </bpmn:callActivity>
+    <bpmn:scriptTask id="Activity_ScriptTask_BuildCampaignCreationRequest" name="Build campaign creation request" scriptFormat="javascript" camunda:resultVariable="campaignCreationRequest">
+      <bpmn:incoming>Flow_1cm5chk</bpmn:incoming>
+      <bpmn:outgoing>Flow_0wrs3vu</bpmn:outgoing>
+      <bpmn:script>var jsonVar = execution.getVariable("input");
+var parsedJsObj = JSON.parse(jsonVar);
+
+var jsonInfo = {};
+jsonInfo.country = parsedJsObj.country;
+jsonInfo.budget = parsedJsObj.budget;
+jsonInfo.startDate = parsedJsObj.startDate;
+jsonInfo.endDate = parsedJsObj.endDate;
+
+S(JSON.stringify(jsonInfo));</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:sequenceFlow id="Flow_0wrs3vu" sourceRef="Activity_ScriptTask_BuildCampaignCreationRequest" targetRef="CallActivity_CreateCampaign" />
+    <bpmn:textAnnotation id="TextAnnotation_0esmq2x">
+      <bpmn:text>INPUT
+---------
+☑ country
+☑ budget
+☑ startDate
+☑ endDate</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:association id="Association_0a1btm6" sourceRef="StartEvent_1" targetRef="TextAnnotation_0esmq2x" />
+    <bpmn:textAnnotation id="TextAnnotation_1j6kupa">
+      <bpmn:text>POST: /api/v1.0/campaigns/check-overlapping</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:association id="Association_1ikgg8t" sourceRef="CallActivity_VerifyOverlapping" targetRef="TextAnnotation_1j6kupa" />
+    <bpmn:textAnnotation id="TextAnnotation_11r3id3">
+      <bpmn:text>POST: /api/v1.0/campaigns</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:association id="Association_0x11mq9" sourceRef="CallActivity_CreateCampaign" targetRef="TextAnnotation_11r3id3" />
+  </bpmn:process>
+  <bpmn:error id="Error_036f9pj" name="Error_UNEXPECTED_STATUS_CODE" errorCode="UNEXPECTED_STATUS_CODE" />
+  <bpmn:error id="Error_18tjxf4" name="Error_HTTP_ERROR" errorCode="HTTP_ERROR" camunda:errorMessage="Campaign with overlap" />
+  <bpmn:error id="Error_0hg48qd" name="Error_Bussines" errorCode="OVERLAPS" camunda:errorMessage="Campaign with overlaps" />
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="campaign-creation-process">
+      <bpmndi:BPMNShape id="TextAnnotation_11r3id3_di" bpmnElement="TextAnnotation_11r3id3">
+        <dc:Bounds x="841" y="80" width="157" height="30" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_0zv6xb5_di" bpmnElement="Flow_0zv6xb5">
+        <di:waypoint x="640" y="212" />
+        <di:waypoint x="640" y="281" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="646" y="244" width="18" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1cm5chk_di" bpmnElement="Flow_1cm5chk">
+        <di:waypoint x="665" y="187" />
+        <di:waypoint x="720" y="187" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0zh376s_di" bpmnElement="Flow_0zh376s">
+        <di:waypoint x="560" y="187" />
+        <di:waypoint x="615" y="187" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1p31ap1_di" bpmnElement="Flow_1p31ap1">
+        <di:waypoint x="258" y="187" />
+        <di:waypoint x="310" y="187" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0yc7vbe_di" bpmnElement="Flow_0yc7vbe">
+        <di:waypoint x="410" y="187" />
+        <di:waypoint x="460" y="187" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_04kqnwb_di" bpmnElement="Flow_04kqnwb">
+        <di:waypoint x="970" y="187" />
+        <di:waypoint x="1022" y="187" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0wrs3vu_di" bpmnElement="Flow_0wrs3vu">
+        <di:waypoint x="820" y="187" />
+        <di:waypoint x="870" y="187" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="_BPMNShape_StartEvent_2" bpmnElement="StartEvent_1">
+        <dc:Bounds x="222" y="169" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_1gxcgu2" bpmnElement="Activity_ScriptTask_BuildOverlapValidationRequest">
+        <dc:Bounds x="310" y="147" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_1nxjkan" bpmnElement="CallActivity_VerifyOverlapping">
+        <dc:Bounds x="460" y="147" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_1j7ixa3_di" bpmnElement="Gateway_1j7ixa3" isMarkerVisible="true">
+        <dc:Bounds x="615" y="162" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="614" y="143" width="51" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_1wc7kdu_di" bpmnElement="Event_0pnyt2j">
+        <dc:Bounds x="622" y="281" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="604" y="324" width="73" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_1jebvge" bpmnElement="Activity_ScriptTask_BuildCampaignCreationRequest">
+        <dc:Bounds x="720" y="147" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_075ujuy_di" bpmnElement="CallActivity_CreateCampaign">
+        <dc:Bounds x="870" y="147" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_1k6xrgj_di" bpmnElement="Event_1k6xrgj">
+        <dc:Bounds x="1022" y="169" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_1ewuxcd" bpmnElement="SubProcess_1i34re8" isExpanded="true">
+        <dc:Bounds x="225" y="390" width="275" height="140" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="BPMNEdge_18qjjpn" bpmnElement="SequenceFlow_1l4hhzs">
+        <di:waypoint x="283" y="460" />
+        <di:waypoint x="315" y="460" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_02qg6wx" bpmnElement="SequenceFlow_02sgkga">
+        <di:waypoint x="415" y="460" />
+        <di:waypoint x="442" y="460" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="BPMNShape_1iydvva" bpmnElement="EventoFinalizacionControlErrores">
+        <dc:Bounds x="442" y="442" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_1ntv0xh_di" bpmnElement="StartErrorHandler">
+        <dc:Bounds x="247" y="442" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_09g6emg" bpmnElement="ServiceTask_ErrorHandler">
+        <dc:Bounds x="315" y="420" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="TextAnnotation_0esmq2x_di" bpmnElement="TextAnnotation_0esmq2x">
+        <dc:Bounds x="198" y="250" width="83" height="98" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="TextAnnotation_1j6kupa_di" bpmnElement="TextAnnotation_1j6kupa">
+        <dc:Bounds x="377" y="80" width="264.9924089068826" height="29.995360998650472" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Association_0a1btm6_di" bpmnElement="Association_0a1btm6">
+        <di:waypoint x="240" y="205" />
+        <di:waypoint x="240" y="250" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Association_1ikgg8t_di" bpmnElement="Association_1ikgg8t">
+        <di:waypoint x="510" y="147" />
+        <di:waypoint x="510" y="110" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Association_0x11mq9_di" bpmnElement="Association_0x11mq9">
+        <di:waypoint x="920" y="147" />
+        <di:waypoint x="920" y="110" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
